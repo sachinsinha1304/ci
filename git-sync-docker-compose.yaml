@@ -1,0 +1,10 @@
+  git-sync:
+    image: k8s.gcr.io/git-sync/git-sync:v4.0.0
+    environment:
+      - GIT_SYNC_REPO=https://github.com/sachinsinha1304/ci.git
+      - GIT_SYNC_BRANCH=main
+      - GIT_SYNC_ROOT=/git
+      - GIT_SYNC_DEST=repo
+      - GIT_SYNC_WAIT=30
+    volumes:
+      - ./dags:/opt/airflow/dags
