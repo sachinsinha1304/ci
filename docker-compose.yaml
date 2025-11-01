@@ -7,48 +7,48 @@ x-airflow-common:
     - .env
   environment:
     &airflow-common-env
+    # --- Airflow Core Config ---
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+
+    # --- Airflow DB Connection (External MySQL) ---
+    # 👇 Update this line with your actual MySQL server IP/hostname and credentials
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+      mysql+mysqldb://airflow:airflow@172.20.42.143:3306/airflow
+
+    # Optional: prevent strict mode issues
+    AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS: 'false'
+
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    postgres:
-      condition: service_healthy
 
 services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 10s
-      retries: 5
-    # ✅ Use Docker-managed volume instead of Windows bind mount
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  # -------------------------------
+  # ✅ Airflow Init (DB + Admin User)
+  # -------------------------------
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db init &&
+               airflow users create
+               --username airflow
+               --password airflow
+               --firstname Air
+               --lastname Flow
+               --role Admin
+               --email admin@example.com"
+    restart: "no"
 
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: practice_db
-    ports:
-      - "3307:3306"
-    # ✅ Same here: use Docker volume (to avoid NTFS permission issues)
-    volumes:
-      - mysql_data:/var/lib/mysql
-
+  # -------------------------------
+  # ✅ Airflow Webserver
+  # -------------------------------
   airflow-webserver:
     <<: *airflow-common
     command: webserver
@@ -60,23 +60,18 @@ services:
       retries: 5
     restart: always
 
+  # -------------------------------
+  # ✅ Airflow Scheduler
+  # -------------------------------
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
     restart: always
 
+  # -------------------------------
+  # ✅ Airflow Triggerer (optional)
+  # -------------------------------
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
     restart: always
-
-  airflow-init:
-    <<: *airflow-common
-    command: bash -c "airflow db init && \
-      airflow users create --username airflow --password airflow \
-      --firstname Air --lastname Flow --role Admin --email admin@example.com"
-
-# ✅ Define named volumes for Postgres & MySQL
-volumes:
-  postgres_data:
-  mysql_data:
